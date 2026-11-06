@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Le Jeu des Ascenseurs</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1c1f24">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ascenseurs">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root{
+    --bg:#1c1f24; --wall:#2a2e35; --wall2:#33383f; --metal1:#b9c0c8; --metal2:#7d858f;
+    --led:#ff8a1f; --ledoff:#3a2a1c; --up:#3ddc84; --off:#3b4048; --text:#eef1f4; --muted:#9aa3ad;
+    --good:#3ddc84; --bad:#ff5a5a; --gold:#ffcc4d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  #app{max-width:720px;margin:0 auto;padding:14px 12px 24px;display:flex;flex-direction:column;gap:12px;min-height:100%;
+    padding-top:max(14px, env(safe-area-inset-top))}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  .hud{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .hud div{background:#262a30;border-radius:10px;padding:8px 6px;text-align:center}
+  .hud small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  .hud b{font-size:20px;font-variant-numeric:tabular-nums}
+  .lobby{position:relative;background:linear-gradient(var(--wall2),var(--wall));border-radius:14px;
+    padding:14px 8px 0;overflow:hidden;box-shadow:inset 0 0 0 1px #ffffff10}
+  .topline{display:flex;justify-content:space-between;align-items:center;padding:0 6px 10px}
+  .floorsign{background:#111;border:2px solid #444;border-radius:8px;padding:4px 10px;font-size:13px;color:var(--muted)}
+  .floorsign b{color:var(--led);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;margin-left:6px;
+    text-shadow:0 0 8px #ff8a1f88}
+  .callbtn{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .callbtn span{width:22px;height:22px;border-radius:50%;background:#555;border:3px solid #888;display:inline-block}
+  .callbtn span.on{background:#ffd27a;box-shadow:0 0 10px #ffd27a}
+  .row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .elev{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .label{font-weight:700;color:var(--muted);font-size:13px}
+  .panel{width:100%;max-width:120px;background:#0d0d0f;border:2px solid #555;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 4px;height:52px}
+  .digits{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:28px;color:var(--led);
+    min-width:2ch;text-align:center;text-shadow:0 0 10px #ff8a1fa0;font-variant-numeric:tabular-nums}
+  .arrows{display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:1}
+  .arrows i{font-style:normal;color:var(--off)}
+  .arrows i.on{color:var(--up);text-shadow:0 0 8px var(--up)}
+  .stopped{font-size:11px;color:#ffd27a;visibility:hidden;height:14px}
+  .stopped.on{visibility:visible}
+  .stops{font-size:11px;color:var(--muted);text-align:center;min-height:30px;line-height:1.3;max-width:120px}
+  .stops b{color:#ffd27a;font-variant-numeric:tabular-nums}
+  .stops .direct{color:var(--up)}
+  .door{position:relative;width:100%;max-width:120px;aspect-ratio:3/5;border:5px solid #5d646c;border-bottom:none;
+    border-radius:6px 6px 0 0;background:#f6e7b8;overflow:hidden}
+  .inside{position:absolute;inset:0;background:radial-gradient(circle at 50% 30%,#fff6d6,#e2c98a)}
+  .leaf{position:absolute;top:0;bottom:0;width:50%;background:linear-gradient(90deg,var(--metal2),var(--metal1) 40%,var(--metal2));
+    transition:transform .7s ease}
+  .leaf.l{left:0;border-right:1px solid #555}
+  .leaf.r{right:0;border-left:1px solid #555}
+  .door.open .leaf.l{transform:translateX(-100%)}
+  .door.open .leaf.r{transform:translateX(100%)}
+  .elev.win .panel{border-color:var(--gold)}
+  .floor{position:relative;height:74px;background:linear-gradient(#6b5b4a,#4f4336);margin:0 -8px;border-top:4px solid #3a3129}
+  #player{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:34px;height:60px;
+    transition:left .3s linear}
+  #player svg{width:100%;height:100%}
+  #player.walk svg{animation:bob .25s infinite alternate}
+  @keyframes bob{to{transform:translateY(-3px)}}
+  .hint{margin:0;color:var(--muted);font-size:13px;text-align:center}
+  .msg{min-height:26px;text-align:center;font-weight:700;font-size:16px}
+  .msg.good{color:var(--good)} .msg.bad{color:var(--bad)}
+  .overlay{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+  .overlay.hidden{display:none}
+  .card{background:#262a30;border-radius:16px;padding:22px 20px;max-width:440px;width:100%;box-shadow:0 10px 40px #0008}
+  .card h2{margin:0 0 10px;font-size:22px}
+  .card p,.card li{color:#cfd5db;font-size:15px;line-height:1.45}
+  .card ul{padding-left:18px;margin:8px 0}
+  .btn{display:inline-block;margin-top:12px;border:0;border-radius:12px;padding:12px 18px;font-size:16px;font-weight:700;
+    background:var(--led);color:#1b1205;cursor:pointer;width:100%}
+  .btn.sec{background:#3a4048;color:var(--text)}
+  .big{font-size:40px;font-weight:800;color:var(--gold);margin:6px 0}
+  .controls{display:flex;gap:8px}
+  .controls .btn{margin-top:0}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>🛗 Le Jeu des Ascenseurs</h1>
+  <div class="hud">
+    <div><small>Manche</small><b id="hRound">–</b></div>
+    <div><small>Score</small><b id="hScore">0</b></div>
+    <div><small>Série</small><b id="hStreak">0</b></div>
+    <div><small>Record</small><b id="hBest">0</b></div>
+  </div>
+
+  <div class="lobby">
+    <div class="topline">
+      <div class="floorsign">Vous êtes à l'étage<b id="myFloor">–</b></div>
+      <div class="callbtn"><span id="call"></span>Appel</div>
+    </div>
+    <div class="row" id="row"></div>
+    <div class="floor">
+      <div id="player">
+        <svg viewBox="0 0 34 60" aria-label="Vous">
+          <circle cx="17" cy="9" r="7" fill="#f2c9a0"/>
+          <rect x="9" y="17" width="16" height="22" rx="5" fill="#2f7de1"/>
+          <rect x="10" y="38" width="6" height="18" rx="3" fill="#30343b"/>
+          <rect x="18" y="38" width="6" height="18" rx="3" fill="#30343b"/>
+          <rect x="5" y="19" width="5" height="16" rx="2.5" fill="#2f7de1"/>
+          <rect x="24" y="19" width="5" height="16" rx="2.5" fill="#2f7de1"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="msg" id="msg"></div>
+  <p class="hint">Touchez une porte (ou utilisez ← →) pour vous placer devant. Les cabines vont à la même vitesse (1 étage par seconde), mais s'arrêtent au hasard en route, pour une durée variable.</p>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+(() => {
+  const TOP = 14, FLOOR = 7, N = 4, ROUNDS = 10, NAMES = ['A','B','C','D'];
+  const POS = [12.5, 37.5, 62.5, 87.5];
+  const $ = id => document.getElementById(id);
+  const rnd = (a,b) => a + Math.random()*(b-a);
+  const rint = (a,b) => Math.floor(rnd(a,b+1));
+
+  // ---------- DOM ----------
+  const row = $('row');
+  const els = [];
+  for (let i=0;i<N;i++){
+    const d = document.createElement('div');
+    d.className='elev';
+    d.innerHTML = `<div class="label">${NAMES[i]}</div>
+      <div class="panel"><div class="digits">–</div><div class="arrows"><i>▲</i><i>▼</i></div></div>
+      <div class="stopped">⏸ arrêt</div>
+      <div class="door"><div class="inside"></div><div class="leaf l"></div><div class="leaf r"></div></div>`;
+    d.addEventListener('click', () => moveTo(i));
+    row.appendChild(d);
+    els.push({root:d, digits:d.querySelector('.digits'), up:d.querySelectorAll('.arrows i')[0],
+      down:d.querySelectorAll('.arrows i')[1], door:d.querySelector('.door'), stopped:d.querySelector('.stopped')});
+  }
+
+  // ---------- Son ----------
+  let actx = null;
+  function initAudio(){ try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume&&actx.resume(); }catch(e){} }
+  function ding(){
+    if(!actx) return;
+    try{
+      [880, 660].forEach((f,k)=>{
+        const o=actx.createOscillator(), g=actx.createGain();
+        o.type='sine'; o.frequency.value=f;
+        const t=actx.currentTime + k*0.28;
+        g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t+1);
+      });
+    }catch(e){}
+  }
+
+  // ---------- État ----------
+  let best = 0; try{ best = +localStorage.getItem('asc_best') || 0; }catch(e){}
+  $('hBest').textContent = best;
+  let round=0, score=0, streak=0, P=0, elevs=[], running=false, last=0, clock=0;
+  const player = {door:null, walking:false, since:0, el:$('player')};
+
+  // ---------- Génération d'une manche ----------
+  const SPEED = 1;     // étages par seconde
+  const dwellTime = () => rnd(1, 4.5);   // durée d'arrêt aléatoire
+  function pickDistinct(arr, k){
+    const a = arr.slice(), out = [];
+    while (out.length < k && a.length) out.push(a.splice(rint(0,a.length-1),1)[0]);
+    return out;
+  }
+  function buildRoute(start, dir, target, nStops){
+    const legs = [];
+    if ((target - start) * dir < 0){
+      const turn = dir > 0 ? rint(start+1, TOP) : rint(0, start-1);
+      legs.push([start, turn]); legs.push([turn, target]);
+    } else legs.push([start, target]);
+    const cand = [];
+    legs.forEach(([a,b]) => { const s=Math.sign(b-a); for (let f=a+s; f!==b; f+=s) cand.push(f); });
+    const extra = new Set(pickDistinct(cand.filter((f,i)=>cand.indexOf(f)===i), nStops));
+    const route = [];
+    legs.forEach(([a,b], li) => {
+      const s = Math.sign(b-a);
+      for (let f=a+s; f!==b; f+=s){
+        if (extra.has(f)){ route.push({floor:f, dwell:dwellTime()}); extra.delete(f); }
+      }
+      if (li < legs.length-1) route.push({floor:b, dwell:dwellTime()});
+    });
+    route.push({floor:target, dwell:0, final:true});
+    return route;
+  }
+  function eta(e){
+    let t = 0, p = e.pos;
+    for (const s of e.route){ t += Math.abs(s.floor - p)/SPEED + (s.final?0:s.dwell); p = s.floor; }
+    return t;
+  }
+  function makeRound(){
+    const maxStops = 1 + Math.floor(round/3);
+    const minGap = Math.max(0.5, 2 - round*0.15);
+    P = FLOOR;
+    for (let tries=0; tries<2000; tries++){
+      const list = [];
+      for (let i=0;i<N;i++){
+        let pos; do { pos = rint(0,TOP); } while (pos === P);
+        const dir = pos===0 ? 1 : pos===TOP ? -1 : (Math.random()<.5?1:-1);
+        const e = {pos, dir, dwell:0, shown:dir};
+        e.route = buildRoute(pos, dir, P, rint(0, maxStops));
+        e.eta = eta(e);
+        list.push(e);
+      }
+      const etas = list.map(e=>e.eta).sort((a,b)=>a-b);
+      if (etas[0] >= 6 && etas[0] <= 22 && etas[1]-etas[0] >= minGap && etas[1]-etas[0] <= 6) { elevs = list; return; }
+    }
+  }
+
+  // ---------- Joueur ----------
+  function moveTo(i){
+    if (!running) return;
+    initAudio();
+    if (player.door === i && !player.walking) return;
+    const from = player.door===null ? 50 : POS[player.door];
+    const dist = Math.abs(POS[i]-from)/25;
+    player.door = i; player.walking = true;
+    player.el.style.transitionDuration = (0.28*dist).toFixed(2)+'s';
+    player.el.style.left = POS[i]+'%';
+    player.el.classList.add('walk');
+    clearTimeout(player.t);
+    player.t = setTimeout(()=>{ player.walking=false; player.since=clock; player.el.classList.remove('walk'); }, 280*dist);
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key==='ArrowLeft'){ e.preventDefault(); moveTo(player.door===null?1:Math.max(0,player.door-1)); }
+    if (e.key==='ArrowRight'){ e.preventDefault(); moveTo(player.door===null?2:Math.min(N-1,player.door+1)); }
+    if (/^[1-4]$/.test(e.key)) moveTo(+e.key-1);
+    if ((e.key==='Enter'||e.key===' ') && !$('overlay').classList.contains('hidden')){
+      const b = $('card').querySelector('.btn'); if (b){ e.preventDefault(); b.click(); }
+    }
+  });
+
+  // ---------- Affichage ----------
+  function render(){
+    elevs.forEach((e,i)=>{
+      const v = els[i];
+      v.digits.textContent = Math.round(e.pos);
+      const tgt = e.route[0] ? e.route[0].floor : e.pos;
+      const d = Math.sign(tgt - e.pos);
+      if (d) e.shown = d;
+      v.up.classList.toggle('on', e.shown>0);
+      v.down.classList.toggle('on', e.shown<0);
+      v.stopped.classList.toggle('on', e.dwell>0);
+    });
+  }
+
+  // ---------- Boucle ----------
+  function tick(now){
+    if (!running) return;
+    const dt = Math.min(0.05, (now - last)/1000); last = now; clock += dt;
+    for (let i=0;i<N;i++){
+      const e = elevs[i];
+      let t = dt;
+      while (t > 0 && e.route.length){
+        if (e.dwell > 0){ const u = Math.min(t, e.dwell); e.dwell -= u; t -= u; continue; }
+        const s = e.route[0], d = s.floor - e.pos, step = SPEED * t;
+        if (Math.abs(d) <= step){
+          t -= Math.abs(d)/SPEED; e.pos = s.floor;
+          if (s.final){ render(); return arrive(i); }
+          e.dwell = s.dwell; e.route.shift();
+        } else { e.pos += Math.sign(d)*step; t = 0; }
+      }
+    }
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  function arrive(i){
+    running = false;
+    ding();
+    els[i].door.classList.add('open');
+    els[i].root.classList.add('win');
+    $('call').classList.remove('on');
+    const ok = player.door === i && !player.walking;
+    const msg = $('msg');
+    let gained = 0;
+    if (ok){
+      streak++;
+      const anticip = Math.min(clock - player.since, 8);
+      gained = 100 + Math.round(anticip*12.5) + 25*(streak-1);
+      score += gained;
+      msg.className='msg good';
+      msg.textContent = `Bien joué ! Ascenseur ${NAMES[i]} · +${gained}`;
+    } else {
+      streak = 0;
+      msg.className='msg bad';
+      msg.textContent = player.door===null ? `Trop tard ! C'était l'ascenseur ${NAMES[i]}`
+        : `Raté… c'était l'ascenseur ${NAMES[i]}`;
+    }
+    updateHud();
+    setTimeout(()=>{
+      if (round >= ROUNDS) return endGame();
+      showCard(`<h2>${ok?'✅ Gagné':'❌ Raté'}</h2>
+        <p>${ok?`+${gained} points (anticipation et série comprises).`:`L'ascenseur ${NAMES[i]} est arrivé le premier.`}</p>
+        <button class="btn">Manche ${round+1} / ${ROUNDS}</button>`, startRound);
+    }, 1600);
+  }
+
+  function updateHud(){
+    $('hRound').textContent = round ? `${round}/${ROUNDS}` : '–';
+    $('hScore').textContent = score;
+    $('hStreak').textContent = streak;
+    $('hBest').textContent = best;
+  }
+
+  function startRound(){
+    hideCard();
+    round++;
+    makeRound();
+    els.forEach(v=>{ v.door.classList.remove('open'); v.root.classList.remove('win'); });
+    $('myFloor').textContent = P;
+    $('call').classList.add('on');
+    $('msg').className='msg'; $('msg').textContent = 'Quel ascenseur arrivera le premier ?';
+    player.door = null; player.walking = false;
+    player.el.style.transitionDuration='0s'; player.el.style.left='50%';
+    updateHud(); render();
+    running = true; clock = 0; last = performance.now();
+    requestAnimationFrame(tick);
+  }
+
+  function newGame(){ initAudio(); round=0; score=0; streak=0; updateHud(); startRound(); }
+
+  function endGame(){
+    const record = score > best;
+    if (record){ best = score; try{ localStorage.setItem('asc_best', best); }catch(e){} }
+    updateHud();
+    showCard(`<h2>🏁 Partie terminée</h2>
+      <div class="big">${score} pts</div>
+      <p>${record?'🎉 Nouveau record !':`Record : ${best} pts`}</p>
+      <button class="btn">Rejouer</button>`, newGame);
+  }
+
+  function showCard(html, onBtn){
+    $('card').innerHTML = html;
+    $('card').querySelector('.btn').onclick = onBtn;
+    $('overlay').classList.remove('hidden');
+  }
+  function hideCard(){ $('overlay').classList.add('hidden'); }
+
+  showCard(`<h2>🛗 Le Jeu des Ascenseurs</h2>
+    <p>Vous attendez au <b>7e étage</b>. Les 4 ascenseurs viennent tous vous chercher : chacun s'arrêtera forcément au 7e.</p>
+    <ul>
+      <li>Les afficheurs montrent l'étage de chaque cabine et son sens (▲ ▼).</li>
+      <li>Même vitesse pour tous : <b>1 étage par seconde</b>.</li>
+      <li>Mais les cabines s'arrêtent <b>au hasard</b> à d'autres étages, et chaque arrêt a une durée différente.</li>
+      <li>Une cabine qui s'éloigne du 7e devra faire demi-tour avant de venir.</li>
+      <li>Observez, anticipez, et changez de porte si besoin. Plus vous choisissez tôt le bon, plus vous gagnez.</li>
+    </ul>
+    <p>${ROUNDS} manches, de plus en plus difficiles.</p>
+    <button class="btn">Commencer</button>`, newGame);
+  render();
+})();
+</script>
+<!-- PWA : enregistrement du service worker (fonctionnement hors ligne + installation) -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
